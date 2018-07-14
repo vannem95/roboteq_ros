@@ -60,7 +60,7 @@ def initialize():
 
     rospy.init_node('odometry_publisher')
     rospy.loginfo('status: odometry_publisher crearted')
-    # rospy.Subscriber('/cmd_vel', Twist, move_callback)
+    rospy.Subscriber('/cmd_vel', Twist, move_callback)
     odom_pub = rospy.Publisher("odom", Odometry, queue_size=50)
     odom_broadcaster = tf.TransformBroadcaster()
     rospy.loginfo('status: odom_pub initiated')
@@ -342,7 +342,7 @@ def getEncoders():
 
 #########################################################################################
 #########################################################################################
-###################################### RC Input #########################################
+###################################### Move Command #####################################
 #########################################################################################
 #########################################################################################
 
@@ -409,8 +409,8 @@ vth = 0.0
 encoder_ppr = 2048                                                      # encoder is connected to the shaft. Gear ratio between shaft and wheel is ~81
 wheel_diameter = 16                                                     # in inches
 in_to_m = 0.0254
-
-enc_countperrev_left_front  = 165881.1                                  # Gear ratio between shaft and wheel is ~81
+ 
+enc_countperrev_left_front  = 165881.1                                  # Gear ratio between shaft and wheel is ~81 (2048 x 81 = 165888)
 enc_countperrev_left_rear   = 165884.3                                 
 enc_countperrev_right_front = 165883.9                                 
 enc_countperrev_right_rear  = 165885.5                                 
@@ -511,6 +511,69 @@ def odom_publisher():
 
 #########################################################################################
 #########################################################################################
+#################################### Move Callback ######################################
+#########################################################################################
+#########################################################################################
+
+EM_STOP = 0
+RC_MODE = 0
+mps_to_movecmd = 20.0/0.095
+rps_to_movecmd = 20.0/0.25
+
+
+def sign(a):
+    return (a/abs(a))
+
+def move_callback(data):
+
+    global EM_STOP
+    global RC_MODE
+
+    # get the RC Vals
+    pulses = getRCInput()
+    signs = [1,-1]
+
+    if (pulses[0] > 1600):  #estop button pushed
+
+        ser.write('@00!EX\r')
+        EM_STOP = 1
+
+    elif (EM_STOP) and (pulses[1] > 1600):
+
+        ser.write('@00!MG\r')
+        EM_STOP = 0
+        RC_MODE = 1
+
+    elif (RC_MODE):
+
+        [speed,signs] = pulse2speed(pulses)
+        move_command(speed,signs)
+
+    else:
+
+        if (abs(data.linear.x) > 0.005 and abs(data.linear.x) < 2.0):
+            speed = abs(data.linear.x) * mps_to_movecmd
+            signs[0] = sign(data.linear.x)
+            signs[1] = -sign(data.linear.x)
+
+        elif (abs(data.angular.z) > 0.005 and abs(data.angular.z) < 2.0):
+            speed = abs(data.angular.z) * rps_to_movecmd
+            signs[0] = sign(data.angular.z)
+            signs[1] = -sign(data.angular.z)
+
+        else:
+            speed = 0
+            signs[0] = 1
+            signs[1] = -1
+
+        move_command(speed,signs)
+
+#########################################################################################
+
+
+
+#########################################################################################
+#########################################################################################
 ######################################### Main ##########################################
 #########################################################################################
 #########################################################################################
@@ -523,13 +586,11 @@ if __name__ == "__main__":
     while (not rospy.is_shutdown()) and (communication_error == 0):
 
         try:
-            
+
             odom_publisher()
-            pulses = getRCInput()
-            [speed,signs] = pulse2speed(pulses)
-            # rospy.loginfo('odom speed: %f ----- odom rot: %f',odom.twist.twist.linear.x,odom.twist.twist.angular.z)
-            # speed = 20
-            move_command(speed,signs)
+            # pulses = getRCInput()
+            # [speed,signs] = pulse2speed(pulses)
+            # move_command(speed,signs)
             enc_last  = getEncoders()
             last_time = current_time
             r.sleep()
