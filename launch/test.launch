@@ -1,0 +1,4 @@
+<launch>
+  <node name="odometry_publisher" pkg="roboteq_ros" type="roboteq_ros_odom.py" output="screen">
+  </node>
+</launch>

@@ -58,8 +58,9 @@ def initialize():
     global last_time
     global enc_last
     global pub_time
+    global test_wheels
 
-    rospy.init_node('odometry_publisher')
+    rospy.init_node('odometry_publisher2')
     rospy.loginfo('status: odometry_publisher crearted')
     rospy.Subscriber('/cmd_vel', Twist, move_callback)
     odom_pub = rospy.Publisher("odom", Odometry, queue_size=50)
@@ -70,7 +71,9 @@ def initialize():
     current_time = rospy.Time.now()
     last_time = rospy.Time.now()
     pub_time = rospy.get_time()
-    enc_last  = getEncoders()
+    # enc_last  = getEncoders()
+    getRCnENC()
+    enc_last = test_wheels
 
 #########################################################################################
 
@@ -89,7 +92,8 @@ mode_debug = 0
 speed_debug = 0
 reader_debug = 0
 getdata_debug = 1
-test_debug = 1
+test_debug = 0
+rc_enc_debug = 0
 
 
 def debug_printer(debug,variable,variable_value):
@@ -370,6 +374,52 @@ def getEncoders():
 
 #########################################################################################
 #########################################################################################
+###################################### RC + Encoders ####################################
+#########################################################################################
+#########################################################################################
+
+def getRCnENC():
+
+    global debug
+    global encoder_debug
+    global rc_enc_debug
+    global test_pulsevals
+    global test_wheels
+
+#  command : @01?PI 1_@01?PI 2_@01?C 1_@01?C 2_@02?C 1_@02?C 2_
+
+    leftWheel = [0,0]
+    rightWheel = [0,0]
+    pulse1 = 1495
+    pulse2 = 1492
+
+    command = "@01?PI 1_@01?PI 2_@01?C 1_@01?C 2_@02?C 1_@02?C 2_\r"
+
+    time.sleep(0.0015)
+    ser.write(command)  
+    time.sleep(0.0015)
+
+    command_count = (2*6) - 1
+    output = getdata3(command_count)
+
+    test_pulsevals = [clean_messages(output[0]),clean_messages(output[1])]
+    test_encodervals = [clean_messages(output[2]),clean_messages(output[3]),clean_messages(output[4]),clean_messages(output[5])]
+    leftWheel = [test_encodervals[0],test_encodervals[2]]
+    rightWheel = [test_encodervals[1],test_encodervals[3]]
+
+    test_wheels = [leftWheel,rightWheel]
+
+    debug_printer(debug,'rc_enc output',output)
+    debug_printer(rc_enc_debug,'rc_enc output',[test_pulsevals,test_wheels])
+
+    return
+
+#########################################################################################
+
+
+
+#########################################################################################
+#########################################################################################
 ###################################### Move Command #####################################
 #########################################################################################
 #########################################################################################
@@ -451,7 +501,7 @@ DistancePerCount_left_rear   = (m.pi * wheel_diameter * in_to_m) / enc_countperr
 DistancePerCount_right_front = (m.pi * wheel_diameter * in_to_m) / enc_countperrev_right_front            
 DistancePerCount_right_front = (m.pi * wheel_diameter * in_to_m) / enc_countperrev_right_rear              
 
-lengthBetweenTwoWheels = 26.5 * in_to_m
+lengthBetweenTwoWheels = 26.0 * in_to_m
 
 def odom_publisher():
 
@@ -459,6 +509,8 @@ def odom_publisher():
     global current_time
     global last_time
     global enc_last
+
+    global test_wheels
 
     global DistancePerCount_left_front
     global DistancePerCount_left_rear
@@ -474,7 +526,11 @@ def odom_publisher():
     global odom
 
     current_time = rospy.Time.now()
-    enc_now = getEncoders()
+    # enc_now = getEncoders()
+
+    getRCnENC()
+    enc_now = test_wheels
+
 
     deltaLeft1  = enc_now[0][0]  - enc_last[0][0]
     deltaLeft2  = enc_now[0][1]  - enc_last[0][1]
@@ -548,8 +604,14 @@ def odom_publisher():
 
 EM_STOP = 0
 RC_MODE = 0
-mps_to_movecmd = 20.0/0.095
-rps_to_movecmd = 20.0/0.25
+# mps_to_movecmd = 20.0/0.095
+# rps_to_movecmd = 20.0/0.25
+
+# new speed to movecommand
+mps_to_movecmd = 20.0/0.1085071
+
+# new ang_vel to movecommand
+rps_to_movecmd = 20.0/0.21905
 
 
 def sign(a):
@@ -563,9 +625,11 @@ def move_callback(data):
     global EM_STOP
     global RC_MODE
     global pub_time
+    global test_pulsevals
 
     # get the RC Vals
-    pulses = getRCInput()
+    # pulses = getRCInput()
+    pulses = test_pulsevals
     signs = [1,-1]
     debug_printer(debug,"RC_MODE",RC_MODE)
     debug_printer(debug,"EM_STOP",EM_STOP)
@@ -601,7 +665,7 @@ def move_callback(data):
         elif (abs(data.angular.z) > 0.005 and abs(data.angular.z) < 2.0):
             speed = abs(data.angular.z) * rps_to_movecmd
             signs[0] = sign(data.angular.z)
-            signs[1] = -sign(data.angular.z)
+            signs[1] = sign(data.angular.z)
 
         else:
             speed = 0
@@ -636,22 +700,25 @@ if __name__ == "__main__":
         try:
 
             odom_publisher()
-            enc_last  = getEncoders()
+            # enc_last  = getEncoders()
+            getRCnENC()
+            enc_last = test_wheels
+            
             last_time = current_time
             r.sleep()
 
             time_now = rospy.get_time()
 
             print "time diff:",time_now - pub_time
-            if (time_now - pub_time > 0.5):
+            if (time_now - pub_time > 0.1):
                 RC_MODE = 1
                 ser.write('@00!MG\r')
             else:
                 RC_MODE = 0
 
             if (RC_MODE):
-                pulses = getRCInput()
-                [speed,signs] = pulse2speed(pulses)
+                # pulses = getRCInput()
+                [speed,signs] = pulse2speed(test_pulsevals)
                 move_command(speed,signs)
 
         except KeyboardInterrupt:
