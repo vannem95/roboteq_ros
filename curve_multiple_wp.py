@@ -33,8 +33,6 @@ def pose_update(data):
     global initial_yaw
     global first
 
-    quat = [0,0,0,0]
-
     if first == 1:
         initial_pose = pose
         initial_yaw = yaw
@@ -44,30 +42,10 @@ def pose_update(data):
         first = 1
 
 
-    quat[0] = data.pose.orientation.x
-    quat[1] = data.pose.orientation.y
-    quat[2] = data.pose.orientation.z
-    quat[3] = data.pose.orientation.w
+    yaw = data.point.z
 
-    x = data.pose.position.x
-    y = data.pose.position.y
-
-    euler = euler_from_quaternion(quat)
-    yaw = euler[2]
-
-    if   (-m.pi < yaw)      and (yaw < -0.5* m.pi):
-        yaw = - (yaw + 0.5*m.pi)
-    elif (-0.5* m.pi < yaw) and (yaw < 0):
-        yaw = - (yaw + 0.5*m.pi)
-    elif (0 < yaw)          and (yaw < 0.5* m.pi):
-        yaw = - (yaw + 0.5*m.pi)
-    elif (0.5* m.pi < yaw)  and (yaw < m.pi):
-        yaw = - (yaw - 1.5*m.pi)
-    else:
-        yaw = yaw
-
-    pose[0] = -y
-    pose[1] = -x
+    pose[0] = data.point.x
+    pose[1] = data.point.y
 
 #########################################################################################
 
@@ -97,6 +75,56 @@ debug_printer(debug,'DEBUG MODE', 'ACTIVATED')
 
 #########################################################################################
 #########################################################################################
+############################### curve1 ###################################################
+#########################################################################################
+#########################################################################################
+
+theta_tolerance1 = 0.1
+distance_tolerance1 = 0.2 # in meters
+velocity1 = 0.16
+
+#=========================================================================================== 
+# for a given way point, turn and move forward and turn to goal yaw                         |
+#===========================================================================================
+
+def curve1(waypoint):
+
+    global yaw
+    global pose
+    global vel_pub
+    global initial_pose
+    global initial_yaw
+    global distance_tolerance1
+    global velocity1
+    global debug
+    global rate
+
+    distance = m.hypot(waypoint[0] - initial_pose[0],waypoint[1] - initial_pose[1])
+    target_theta = m.atan2(waypoint[1] - initial_pose[1],waypoint[0] - initial_pose[0])
+    msg = Twist()
+    while (abs(yaw - target_theta) > theta_tolerance1):
+        msg.angular.z = -velocity1
+        vel_pub.publish(msg)
+        rate.sleep()
+
+    msg.angular.z = 0
+    vel_pub.publish(msg)
+    
+    while (m.hypot(waypoint[0] - pose[0],waypoint[1] - pose[1]) > distance_tolerance1):
+        msg.linear.x = velocity1
+        vel_pub.publish(msg)
+        rate.sleep()
+    msg.linear.x = 0
+    msg.angular.z = 0
+    vel_pub.publish(msg)
+
+    rospy.sleep(1)
+
+#########################################################################################
+
+
+#########################################################################################
+#########################################################################################
 ############################### curve ###################################################
 #########################################################################################
 #########################################################################################
@@ -105,8 +133,9 @@ debug_printer(debug,'DEBUG MODE', 'ACTIVATED')
 # for a given way point, it publishes twist to make the robot go on a curved path to the wp|
 #===========================================================================================
 
-distance_tolerance = 0.8 # in meters
+distance_tolerance = 0.2 # in meters
 velocity = 0.16
+update_time = 2.0 # new way point every "update_time" seconds
 
 def curve(waypoint):
 
@@ -119,6 +148,7 @@ def curve(waypoint):
     global velocity
     global debug
     global rate
+    global update_time
 
     distance = m.hypot(waypoint[0] - initial_pose[0],waypoint[1] - initial_pose[1])
     target_theta = m.atan2(waypoint[1] - initial_pose[1],waypoint[0] - initial_pose[0])
@@ -137,7 +167,9 @@ def curve(waypoint):
     msg = Twist()
     msg.linear.x = velocity
 
-    while (m.hypot(waypoint[0] - pose[0],waypoint[1] - pose[1]) > distance_tolerance) and (not rospy.is_shutdown()):
+    t_initial = rospy.get_time()
+
+    while ( rospy.get_time() - t_initial > update_time) and (not rospy.is_shutdown()):
 
         debug_printer(debug,'angular_vel',angular_vel)
         debug_printer(debug,'distance',[m.hypot(waypoint[0] - pose[0],waypoint[1] - pose[1])])
@@ -156,11 +188,11 @@ def curve(waypoint):
 if __name__ == '__main__':
     rospy.init_node('curve_multiple_wp')
     rate = rospy.Rate(25) # 25hz
-    rospy.Subscriber('camera_pose',PoseStamped,pose_update)
+    rospy.Subscriber('base_pose',PointStamped,pose_update)
     rospy.sleep(0.2)
     vel_pub = rospy.Publisher('cmd_vel', Twist, queue_size = 50)
     waypoints = [[0.0 , 1.0 , 1.57],[0.0 , 1.1 , 1.57],[0.0 , 1.2 , 1.57],[0.0 , 1.3 , 1.57],[0.0 , 1.4 , 1.57]]
-    curve(waypoints[0])
+    curve1(waypoints[0])
     curve(waypoints[1])
     curve(waypoints[2])
     curve(waypoints[3])
@@ -170,4 +202,3 @@ if __name__ == '__main__':
     msg.angular.z = 0
     msg.linear.x = 0
     vel_pub.publish(msg)
-
