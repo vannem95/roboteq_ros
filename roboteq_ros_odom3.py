@@ -18,6 +18,7 @@ from geometry_msgs.msg import Point, Pose, Quaternion, Twist, Vector3
 
 # begin the connection to the roboteq controller
 try:
+
     ser = serial.Serial(
         port='/dev/ttyUSB0',
         baudrate=115200, #8N1
@@ -25,18 +26,23 @@ try:
         stopbits=serial.STOPBITS_ONE,
         bytesize=serial.EIGHTBITS,
     )
+
 except:
+
     raise IOError
 
 # reset the connection if need be
 if (ser.isOpen()):
+
     ser.close()
+
 ser.open()
 
 # serial readline based on \r 
 slash_r = io.TextIOWrapper(io.BufferedRWPair(ser, ser, 1),  
                                newline = '\r',
                                line_buffering = True)
+
 slash_r.write(unicode("ID\r"))
 
 #########################################################################################
@@ -60,18 +66,20 @@ def initialize():
     global pub_time
     global test_wheels
 
-    rospy.init_node('odometry_publisher2')
+    rospy.init_node('odometry_publisher3')
     rospy.loginfo('status: odometry_publisher crearted')
     rospy.Subscriber('/cmd_vel', Twist, move_callback)
+
     # odom_pub = rospy.Publisher("odom", Odometry, queue_size=50)
     # odom_broadcaster = tf.TransformBroadcaster()
+
     rospy.loginfo('status: odom_pub initiated')
     r = rospy.Rate(25.0)
 
     current_time = rospy.Time.now()
     last_time = rospy.Time.now()
     pub_time = rospy.get_time()
-    # enc_last  = getEncoders()
+
     getRCnENC()
     enc_last = test_wheels
 
@@ -91,14 +99,18 @@ rc_debug = 0
 mode_debug = 0
 speed_debug = 0
 reader_debug = 0
-getdata_debug = 1
+getdata_debug = 0
 test_debug = 0
 rc_enc_debug = 0
-
+motor_command_debug = 1
+callback_debug = 1
 
 def debug_printer(debug,variable,variable_value):
+
     if debug == 1:
+
         print '======',variable,':',variable_value,'======'
+
     return 
 
 debug_printer(debug,'DEBUG MODE', 'ACTIVATED')
@@ -114,21 +126,31 @@ debug_printer(debug,'DEBUG MODE', 'ACTIVATED')
 #########################################################################################
 
 def getdata3(number_of_commands):
+
     global debug
     global getdata_debug
 
     line = slash_r.readline()
     output = []
+
     while (line == '\r') or (line == '') or (line == '+\r'):
+
         line = slash_r.readline()
+
     start = 1
+
     for i in range(number_of_commands):
+
         if start == 0:
+
             line = slash_r.readline()
+
         if line[0] == '@':
+
             output.append(str(line))
-        # print 'line',line
+
         start = 0
+
     debug_printer(debug,'getdata3 - funtion output',output)
     debug_printer(getdata_debug,'getdata3 - funtion output',output)
 
@@ -141,16 +163,26 @@ def clean_messages(message):
 
     clean_message = ''
     start = 0
-    try:    
+
+    try:
+
         for i in range(0,len(message)):
+
             if (message[i]== '='):
+
                 start = 1
+
             if (message[i]== '\r'):
+
                 clean_message = int(clean_message)
                 return clean_message
+
             if (start == 1):
+
                 clean_message += message[i+1]
+
     except:
+
         return clean_message
 
 #########################################################################################
@@ -190,6 +222,7 @@ def reader(query_id):
     command = ''
 
     if query_id == 'pulse':
+
         broadcast = '@0'
         q_id = 'PI'
         error = 0
@@ -198,6 +231,7 @@ def reader(query_id):
         can_node_id = 1
 
     elif query_id == 'battery':
+
         q_id = 'V'
         broadcast = '@0'
         channel = 2
@@ -206,6 +240,7 @@ def reader(query_id):
         number_of_channels = 1
 
     elif query_id == 'enc_abs':
+
         q_id = 'C'
         broadcast = '@0'
         error = 0
@@ -213,6 +248,7 @@ def reader(query_id):
         number_of_channels = 2
 
     elif query_id == 'enc_rel_rpm':
+
         q_id = 'SR'
         broadcast = '@0'
         error = 0
@@ -220,19 +256,28 @@ def reader(query_id):
         number_of_channels = 2
 
     else:
+
         error = 1
         print 'error: query_id unknown'
 
     if error == 0:
+
         for i in range(number_of_nodes):
+
             c1 = broadcast + str(can_node_id + i) + '?' + q_id
             command += c1
+
             if number_of_channels != 1:
+
                 for j in range(number_of_channels):
+
                     c2 = str(' ' + str(channel+j)) + command_merger
                     command += (j*c1) + c2 
+
             else:
+
                 command += command_merger
+
         command += '\r'
 
         debug_printer(debug,'reader - command',command)
@@ -243,7 +288,9 @@ def reader(query_id):
         time.sleep(0.0015)
         command_count = (2*number_of_nodes*number_of_channels) -1
         output = getdata3(command_count)
+
     else:
+
         output = 'error: incorrect arguments for reader function'
 
     return output
@@ -272,6 +319,7 @@ min_pulse = 1070
 communication_error = 0
 
 def getRCInput():
+
     global pulse1
     global pulse2
     global max_pulse
@@ -282,16 +330,22 @@ def getRCInput():
     global communication_error
 
     try:
+
         pulses = reader('pulse')    
         pulse1 = clean_messages(pulses[0])
         pulse2 = clean_messages(pulses[1])
+
         if (pulse1 > max_pulse) or (pulse2 > max_pulse) or (pulse1 < min_pulse) or (pulse2 < min_pulse):
+
             communication_error = 1
             pulse1 = 1495
             pulse2 = 1492
+
     except Exception as e: # catch *all* exceptions
+
         print e
         print( "error: getRCInput" )
+
     debug_printer(debug,'getRCInput - pulses',pulses)
     debug_printer(rc_debug,'getRCInput - pulses',pulses)
     debug_printer(test_debug,'getRCInput - pulses',pulses)
@@ -308,7 +362,7 @@ def getRCInput():
 #########################################################################################
 #########################################################################################
 
-def pulse2speed(pulses):
+def pulse2vel(pulses):
 
     global min_forward_pulse1 
     global min_backward_pulse1
@@ -318,26 +372,46 @@ def pulse2speed(pulses):
     signs = [0,0]
 
     if (pulses[0] > min_forward_pulse1):
+
         speed = pulses[0] - min_forward_pulse1
         signs[0] = 1
         signs[1] = -1
+        left  = speed * signs[0]
+        right = speed * signs[1] 
+
     elif (pulses[0] < min_backward_pulse1):
+
         speed =  -(pulses[0] - min_backward_pulse1)
         signs[0] = -1
         signs[1] = 1
+        left  = speed * signs[0]
+        right = speed * signs[1]
+
     elif (pulses[1] > min_forward_pulse2):
+
         speed = pulses[1] - min_forward_pulse2
         signs[0] = 1
         signs[1] = 1
+        left  = speed * signs[0]
+        right = speed * signs[1]
+
     elif (pulses[1] < min_backward_pulse1):
+
         speed =  -(pulses[1] - min_backward_pulse2)
         signs[0] = -1
         signs[1] = -1
+        left  = speed * signs[0]
+        right = speed * signs[1]
+
     else:
+
         speed = 0
         signs[0] = 1
         signs[1] = 1
-    return speed, signs
+        left  = speed * signs[0]
+        right = speed * signs[1]
+
+    return left,right
 
 #########################################################################################
 
@@ -350,16 +424,18 @@ def pulse2speed(pulses):
 #########################################################################################
 
 def getEncoders():
+
     global debug
     global encoder_debug
     global test_debug
-
 
     leftWheel = [0,0]
     rightWheel = [0,0]
 
     encoder_absolute = reader('enc_abs')
+
     encoder_values = [clean_messages(encoder_absolute[0]),clean_messages(encoder_absolute[1]),clean_messages(encoder_absolute[2]),clean_messages(encoder_absolute[3])]
+    
     leftWheel = [encoder_values[0],encoder_values[2]]
     rightWheel = [encoder_values[1],encoder_values[3]]
 
@@ -404,6 +480,7 @@ def getRCnENC():
 
     test_pulsevals = [clean_messages(output[0]),clean_messages(output[1])]
     test_encodervals = [clean_messages(output[2]),clean_messages(output[3]),clean_messages(output[4]),clean_messages(output[5])]
+
     leftWheel = [test_encodervals[0],test_encodervals[2]]
     rightWheel = [test_encodervals[1],test_encodervals[3]]
 
@@ -424,16 +501,44 @@ def getRCnENC():
 #########################################################################################
 #########################################################################################
 
-def move_command(speed,signs):
+def move_command(left,right):
 
     global command_merger
+    global motor_command_debug
+
+    debug_printer(motor_command_debug,"motor_command - left,right",[left,right])
+
     try:
-        cmd = '@01!G 1 ' + str(signs[0]*speed) + '_' + '@01!G 2 ' + str(signs[1]*speed) + '_' + '@02!G 1 ' + str(signs[0]*speed) + '_' + '@02!G 2 ' + str(signs[1]*speed) + '\r'
+
+        cmd = '@01!G 1 ' + str(left) + '_' + '@01!G 2 ' + str(right) + '_' + '@02!G 1 ' + str(left) + '_' + '@02!G 2 ' + str(right) + '\r'
         ser.write(cmd)
+
     except Exception as e: # catch *all* exceptions
+
         print e
         print( "error: move_command" )
+
     return 
+
+#########################################################################################
+
+
+
+#########################################################################################
+#########################################################################################
+###################################### data2vel #########################################
+#########################################################################################
+#########################################################################################
+
+def data2vel(data):
+
+    global mps_to_movecmd
+    global rps_to_movecmd
+
+    left  =   (data.linear.x * mps_to_movecmd) - (data.angular.z * rps_to_movecmd)
+    right = - (data.linear.x * mps_to_movecmd) - (data.angular.z * rps_to_movecmd)
+    
+    return left,right
 
 #########################################################################################
 
@@ -448,7 +553,9 @@ def move_command(speed,signs):
 communication_error = 0
 
 def TEST():
+
     global communication_error
+
     for i in range(30):
 
         try:
@@ -458,15 +565,19 @@ def TEST():
             encabs = getEncoders()
             error = 0
             time.sleep(0.01)
-            move_command(0,[1,-1])
+            move_command(0,0)
             time.sleep(0.01)
 
         except Exception as e: # catch *all* exceptions
+
             print e
             print( "error: TEST" )
             error = 1
+
     if error == 1:
+
         communication_error = 1
+
     return 
 
 #########################################################################################
@@ -526,7 +637,6 @@ def odom_publisher():
     global odom
 
     current_time = rospy.Time.now()
-    # enc_now = getEncoders()
 
     getRCnENC()
     enc_now = test_wheels
@@ -604,14 +714,18 @@ def odom_publisher():
 
 EM_STOP = 0
 RC_MODE = 0
-# mps_to_movecmd = 20.0/0.095
-# rps_to_movecmd = 20.0/0.25
 
 # new speed to movecommand
-mps_to_movecmd = 20.0/0.1085071
+mps_to_movecmd = 20.0/0.1033401
 
 # new ang_vel to movecommand
-rps_to_movecmd = 20.0/0.21905
+rps_to_movecmd = 20.0/0.20862
+
+# max linear velocity
+v_max = 2.0
+
+# max angular velocity
+w_max = 2.0
 
 
 def sign(a):
@@ -626,20 +740,24 @@ def move_callback(data):
     global RC_MODE
     global pub_time
     global test_pulsevals
+    global v_max
+    global w_max
+    global callback_debug
 
-    # get the RC Vals
-    # pulses = getRCInput()
+
     pulses = test_pulsevals
     signs = [1,-1]
+
     debug_printer(debug,"RC_MODE",RC_MODE)
     debug_printer(debug,"EM_STOP",EM_STOP)
     debug_printer(mode_debug,"RC_MODE",RC_MODE)
     debug_printer(mode_debug,"EM_STOP",EM_STOP)
 
+    debug_printer(callback_debug,"cmdvel data received - [ vx , wz ]",[data.linear.x,data.angular.z])
+
     pub_time = rospy.get_time()
 
-
-    if (pulses[0] > 1500) and (RC_MODE != 1):  #estop button pushed
+    if (pulses[0] > 1500) and (RC_MODE != 1):  #estop activated
 
         ser.write('@00!EX\r')
         EM_STOP = 1
@@ -652,33 +770,27 @@ def move_callback(data):
 
     elif (RC_MODE):
 
-        [speed,signs] = pulse2speed(pulses)
-        move_command(speed,signs)
+        [left,right] = pulse2vel(pulses)
+        move_command(left,right)
 
     else:
 
-        if (abs(data.linear.x) > 0.005 and abs(data.linear.x) < 2.0):
-            speed = abs(data.linear.x) * mps_to_movecmd
-            signs[0] = sign(data.linear.x)
-            signs[1] = -sign(data.linear.x)
+        if (abs(data.linear.x) < v_max) and (abs(data.angular.z) < w_max):
 
-        elif (abs(data.angular.z) > 0.005 and abs(data.angular.z) < 2.0):
-            speed = abs(data.angular.z) * rps_to_movecmd
-            signs[0] = -sign(data.angular.z)
-            signs[1] = -sign(data.angular.z)
+            [left,right] = data2vel(data)
 
         else:
-            speed = 0
-            signs[0] = 1
-            signs[1] = -1
 
-        debug_printer(debug,"speed",speed)
-        debug_printer(debug,"signs",signs)
-        debug_printer(speed_debug,"speed",speed)
-        debug_printer(speed_debug,"signs",signs)
+            left  = 0
+            right = 0
+
+        debug_printer(debug,"left",left)
+        debug_printer(debug,"right",right)
+        debug_printer(speed_debug,"left",left)
+        debug_printer(speed_debug,"right",right)
 
 
-        move_command(speed,signs)
+        move_command(left,right)
 
 #########################################################################################
 
@@ -699,38 +811,38 @@ if __name__ == "__main__":
 
         try:
 
-            # odom_publisher()
-            # enc_last  = getEncoders()
             getRCnENC()
+
             enc_last = test_wheels
-            
             last_time = current_time
             r.sleep()
-
             time_now = rospy.get_time()
-
             print "time diff:",time_now - pub_time
+
             if (time_now - pub_time > 0.1):
+
                 RC_MODE = 1
                 ser.write('@00!MG\r')
+
             else:
+
                 RC_MODE = 0
 
             if (RC_MODE):
-                # pulses = getRCInput()
-                [speed,signs] = pulse2speed(test_pulsevals)
-                move_command(speed,signs)
+
+                [left,right] = pulse2vel(test_pulsevals)
+                move_command(left,right)
 
         except KeyboardInterrupt:
 
-            speed = 0
-            signs = [1,-1]
-            move_command(speed,signs)
+            left = 0
+            right = 0
+            move_command(left,right)
             ser.close()
 
-    speed = 0
-    signs = [1,-1]
-    move_command(speed,signs)
+    left = 0
+    right = 0
+    move_command(left,right)
     ser.close()
 
 #########################################################################################

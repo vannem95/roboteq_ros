@@ -79,7 +79,7 @@ def callback(data):
 
     [msg.pose.position.x, msg.pose.position.y] = pos1
 
-    msg.pose.position.z = data.global_camera_pose.position.z
+    msg.pose.position.z = 0.0
 
 
     pos0 = pos1
@@ -105,7 +105,7 @@ def initialize():
     global pub
     rospy.init_node('cam_pose_rerouter', anonymous=True)
     rospy.Subscriber("aruco_poses", ArucoMarker, callback)
-    pub = rospy.Publisher('cam_pose_rerouter', PoseStamped, queue_size = 50)
+    pub = rospy.Publisher('camera_pose', PoseStamped, queue_size = 50)
     rospy.spin()
 
 #########################################################################################
